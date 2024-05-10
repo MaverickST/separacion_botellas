@@ -1,26 +1,30 @@
 #include "time_base.h"
 
-// Definición de pines
+// DEFINICIONES DE PINES
+
+//Sensor inductivo
 const int sensorLataPin = 17; // Pin para el sensor inductivo
+
+//ultrasonidos
 const int ultrasonidoObjetoEchoPin = 4;
 const int ultrasonidoObjetoTrigPin = 5;
+//const int ultrasonidoLataEchoPin = 32;
+//const int ultrasonidoLataTrigPin = 36;
+//const int ultrasonidoBotEchoPin = 33;
+//const int ultrasonidoBotTrigPin = 39;
 
-// Sentido de giro del motor no se implementa, solo un sentido
-// const int motorSent1Pin = 19; // Pin para el sentido del motor
-// const int motorSent2Pin = 18; // Pin para el sentido del motor
+//Motor
 const int motorPWM = 16; //Pin PWM para controlar el motor
 
-// Dos ultasonido extras
-// const int ultrasonido1EchoPin = 32;
-// const int ultrasonido1TrigPin = 36;
-// const int ultrasonido2EchoPin = 33;
-// const int ultrasonido2TrigPin = 39;
-
+//Pistones
 const int pistonLataPin = 25;
 const int pistonBotPin = 26;
 
-const int encoderPin = 4; // Pin para la lectura del encoder
+//Encoder
+const int encoderAPin = 4; // Pin para la lectura del encoder
+const int encoderBPin = 
 
+//Constantes
 bool hayLata = false;
 bool hayBotella = false;
 int conteoLatas = 0;
@@ -60,17 +64,27 @@ void setup() {
 
 void loop() {
 
-  // Lectura de latas
-  if(sensorLataPin==HIGH && sensorBotPin==HIGH){
-    tb_enable(&t_latas);
-    tb_update(&t_latas);
+  //Se envían los datos al serial
+  sendDataToSerial(&t_send);
+
+  //Acondicionamiento de las distancias
+  generateTrigger(ultrasonidoObjetoTrigPin);
+  tInicioEcho = micros();
+  if(digitalRead(ultrasonidoObjetoEchoPin)==HIGH){
+    distancia = ((micros() - tInicioEcho)*0.0343)/2;
   }
-  // Lectura de botellas
-  else if(sensorBotPin==HIGH){
+
+  // Si la distancia es menor a 20 cm
+  if(distancia <= 20){
     tb_enable(&t_botellas);
     tb_update(&t_botellas);
   }
-
+  // Lectura de latas
+  if(sensorLataPin==LOW){
+    tb_enable(&t_latas);
+    tb_update(&t_latas);
+  }
+  
   if(tb_check(&t_latas)){
     digitalWrite(pistonLataPin, HIGH);
     conteoLatas++;
@@ -83,24 +97,9 @@ void loop() {
     tb_disable(&t_botellas);
   }
 
-  sendDataToSerial(&t_send);
-
-  generateTrigger(ultrasonidoObjetoTrigPin);
-  if(digitalRead(ultrasonidoObjetoEchoPin)==HIGH){
-    tInicioEcho = micros();
-    inicioEcho = true;
-  }
-  if(inicioEcho && digitalRead(ultrasonidoObjetoEchoPin)==LOW){
-    // Distancia del objeto en cm
-    distancia = ((micros() - tInicioEcho)*0.0343)/2;
-  }
-  // Si la distancia es menor a 20 cm
-  if(distancia <= 20){
-
-  }
-
 }
 
+//Funcion para enviar los datos en el formato que recibe LabVIEW
 void sendDataToSerial(){
   if(tb_check(&t_send)){
     Serial.print("P");
