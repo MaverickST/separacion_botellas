@@ -8,10 +8,6 @@ const int sensorLataPin = 4; // Pin para el sensor inductivo
 //ultrasonidos
 const int ultrasonidoObjetoEchoPin = 3;
 const int ultrasonidoObjetoTrigPin = 2;
-//const int ultrasonidoLataEchoPin = 32;
-//const int ultrasonidoLataTrigPin = 36;
-//const int ultrasonidoBotEchoPin = 33;
-//const int ultrasonidoBotTrigPin = 39;
 
 //Motor
 const int motorPWM = A0; //Pin PWM para controlar el motor
@@ -29,6 +25,9 @@ bool hayLata = false;
 bool hayBotella = false;
 int conteoLatas = 0;
 int conteoBotellas = 0;
+bool Latason = false;
+uint32_t LasttimeLatas = 0; 
+uint32_t LasttimeBotellas = 0; 
 
 time_base_t t_latas;
 time_base_t t_botellas;
@@ -52,7 +51,7 @@ unsigned long timeold = 0;
 
 void setup() {
   // Configuración de los pines de entrada
-  pinMode(sensorLataPin, INPUT);
+  pinMode(sensorLataPin, INPUT_PULLUP);
   pinMode(ultrasonidoObjetoEchoPin, INPUT);
   pinMode(encoderAPin, INPUT);
   pinMode(encoderBPin, INPUT);
@@ -63,11 +62,9 @@ void setup() {
   // Configuración de la comunicación serial
   Serial.begin(9600);
 
-  // Configuración de los timers
-  tb_init(&t_latas, 200000, false);
-  tb_init(&t_reset, 750000, false);
-  tb_init(&t_botellas, 200000, false);
-  tb_init(&t_send, 200000, true);
+  //Para accionar los pistones
+  pinMode(pistonLataPin, OUTPUT);
+  pinMode(pistonBotPin, OUTPUT);
 
   tb_init(&t_low_trigger, 2, true);
   tb_init(&t_high_trigger, 10, true);
@@ -91,36 +88,35 @@ void loop() {
   
 
   // Si la distancia es menor a 20 cm
-  if(distancia <= 2){
-    tb_enable(&t_botellas);
-    tb_update(&t_botellas);
+  if(distancia >= 3 && distancia <=4 && digitalRead(sensorLataPin)==HIGH){
+    delay(80);
+    if (micros() - LasttimeBotellas >= 500000){
+      digitalWrite(pistonBotPin, HIGH);
+      Serial.println("Hay botella!");
+      conteoBotellas++;
+      delay(150);
+      digitalWrite(pistonBotPin, LOW);
+    }
+    LasttimeBotellas = micros();
   }
-  // Lectura de latas
-  if(sensorLataPin==LOW){
-    tb_enable(&t_latas);
-    tb_update(&t_latas);
-  }
-  
-  if(tb_check(&t_latas)){
-    digitalWrite(pistonLataPin, HIGH);
-    conteoLatas++;
-    tb_disable(&t_latas);
-    tb_enable(&t_reset);
-    tb_update(&t_reset);
-  }
-
-  if(tb_check(&t_botellas)){
-    digitalWrite(pistonBotPin, HIGH);
-    conteoBotellas++;
-    tb_disable(&t_botellas);
-    tb_enable(&t_reset);
-    tb_update(&t_reset);
-  }
-
-  if (tb_check(&t_reset)){
-    tb_disable(&t_reset);
+  else {
     digitalWrite(pistonLataPin, LOW);
-    digitalWrite(pistonBotPin, LOW);
+  }
+  //Lectura de latas
+  if(digitalRead(sensorLataPin)==LOW && distancia > 4){
+    delay(100);
+    if(micros()-LasttimeLatas>=500000){
+      digitalWrite(pistonLataPin, HIGH);
+      Serial.println("Hay lata!");
+      conteoLatas++;
+      delay(150);
+      digitalWrite(pistonLataPin, LOW);
+    }    
+    LasttimeLatas = micros();
+  }
+  else{
+    digitalWrite(pistonLataPin, LOW);
+
   }
 
   //Encoder
