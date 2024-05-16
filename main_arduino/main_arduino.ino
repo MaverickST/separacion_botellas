@@ -1,45 +1,25 @@
 #include "time_base.h"
+#define SENSOR 4
+#define ACTION 5 
+#define TRIGGER_PIN 2 // pin para el pulso de disparo del sensor
+#define ECHO_PIN 3 // pin para la medición del eco del sensor
+#define RELAY_PIN 6 // pin para controlar el relé
 
-// DEFINICIONES DE PINES
+int contadorPlastico = 0;
+int contadorMetal = 0;
 
-//Sensor inductivo
-const int sensorLataPin = 4; // Pin para el sensor inductivo
-
-//ultrasonidos
-const int ultrasonidoObjetoEchoPin = 3;
-const int ultrasonidoObjetoTrigPin = 2;
-
-//Motor
-const int motorPWM = A0; //Pin PWM para controlar el motor
-
-//Pistones
-const int pistonLataPin = 5;
-const int pistonBotPin = 6;
+unsigned long int lastTimeL= 0;
+unsigned long int lastTimeP= 0;
+bool boolL = false;
+bool boolP = false;
 
 //Encoder
 const int encoderAPin = 7; // Pin para la lectura del encoder
 const int encoderBPin = 8;
 
-//Constantes
-bool hayLata = false;
-bool hayBotella = false;
-int conteoLatas = 0;
-int conteoBotellas = 0;
-bool Latason = false;
-uint32_t LasttimeLatas = 0; 
-uint32_t LasttimeBotellas = 0; 
-
-time_base_t t_latas;
-time_base_t t_botellas;
-time_base_t t_reset;
-time_base_t t_send;
-
 time_base_t t_low_trigger;
 time_base_t t_high_trigger;
-
-int tInicioEcho;
-bool inicioEcho;
-int distancia;
+time_base_t t_send;
 
 //Para el encoder
 int Encoder_C1Last;
@@ -50,73 +30,80 @@ int pulsesperturn = 11;
 unsigned long timeold = 0;
 
 void setup() {
-  // Configuración de los pines de entrada
-  pinMode(sensorLataPin, INPUT_PULLUP);
-  pinMode(ultrasonidoObjetoEchoPin, INPUT);
-  pinMode(encoderAPin, INPUT);
-  pinMode(encoderBPin, INPUT);
-  // Configuración de los pines de salida
-  pinMode(ultrasonidoObjetoTrigPin, OUTPUT);
-  pinMode(motorPWM, OUTPUT);
-  
-  // Configuración de la comunicación serial
-  Serial.begin(9600);
 
-  //Para accionar los pistones
-  pinMode(pistonLataPin, OUTPUT);
-  pinMode(pistonBotPin, OUTPUT);
-
+  Serial.begin(9600); 
+  pinMode(SENSOR, INPUT_PULLUP); 
+  pinMode(ACTION, OUTPUT); 
+  pinMode(TRIGGER_PIN, OUTPUT); // Configura el pin de disparo como salida
+  pinMode(ECHO_PIN, INPUT); // Configura el pin de eco como entrada
+  pinMode(RELAY_PIN, OUTPUT); // Configura el pin del relé como salida
   tb_init(&t_low_trigger, 2, true);
   tb_init(&t_high_trigger, 10, true);
+  tb_init(&t_send, 200000, true);
+
 
   //Encoder
   attachInterrupt(digitalPinToInterrupt(encoderAPin), calculapulso, CHANGE);
 }
 
+
 void loop() {
 
-
-  //Se envían los datos al serial
   sendDataToSerial();
-  
-  //Acondicionamiento de las distancias
-  generateTrigger(ultrasonidoObjetoTrigPin);
-  tInicioEcho = micros();
-  float t = pulseIn(ultrasonidoObjetoEchoPin, HIGH); //obtenemos el ancho del pulso
-  distancia = t/59;             //escalamos el tiempo a una distancia en cm
-  //Serial.println(distancia);
-  
 
-  // Si la distancia es menor a 20 cm
-  if(distancia >= 3 && distancia <=4 && digitalRead(sensorLataPin)==HIGH){
-    delay(80);
-    if (micros() - LasttimeBotellas >= 500000){
-      digitalWrite(pistonBotPin, HIGH);
-      Serial.println("Hay botella!");
-      conteoBotellas++;
-      delay(150);
-      digitalWrite(pistonBotPin, LOW);
+
+  long duration, distance;
+  // Genera un pulso corto en el pin de disparo
+  generateTrigger(TRIGGER_PIN);
+  int L = digitalRead(SENSOR); 
+  delayMicroseconds(5);
+  
+  if (L == 1) {
+    //Serial.println("All Clear");
+    digitalWrite(ACTION, LOW);
+  } else {
+    //Serial.println("=== Obstacle detected");
+    digitalWrite(ACTION, HIGH);
+    // contadorMetal = contadorMetal+1;
+    if (boolL == false && (micros() - lastTimeL >= 500000)) {
+      boolL = true;
     }
-    LasttimeBotellas = micros();
+    lastTimeL = micros();
   }
-  else {
-    digitalWrite(pistonLataPin, LOW);
-  }
-  //Lectura de latas
-  if(digitalRead(sensorLataPin)==LOW && distancia > 4){
-    delay(100);
-    if(micros()-LasttimeLatas>=500000){
-      digitalWrite(pistonLataPin, HIGH);
-      Serial.println("Hay lata!");
-      conteoLatas++;
-      delay(150);
-      digitalWrite(pistonLataPin, LOW);
-    }    
-    LasttimeLatas = micros();
-  }
-  else{
-    digitalWrite(pistonLataPin, LOW);
 
+  if (boolL == true) {
+    contadorMetal = contadorMetal + 1;
+    boolL = false;
+    // Muestra el número de botellas de metal en el monitor serial
+    Serial.print("Numero de botellas de metal: ");
+    Serial.println(contadorMetal);
+  }
+
+
+  
+  // Mide el tiempo que tarda en llegar el eco
+  duration = pulseIn(ECHO_PIN, HIGH);
+  
+  // Calcula la distancia en centímetros
+  distance = duration * 0.034 / 2;
+  
+  // Imprime la distancia en el monitor serial
+  //Serial.print("Distancia: ");
+  //Serial.print(distance);
+  //Serial.println(" cm");
+ // Si la distancia es menor que 20 cm, activa el relé
+  if (distance < 8) {
+    //Serial.println("¡Objeto detectado! Activando relé.");
+    digitalWrite(RELAY_PIN, HIGH); // Activa el relé
+    if (boolP == false && (micros() - lastTimeP >= 500000)) {
+      boolP = true;
+    }
+    contadorPlastico = contadorPlastico+1;
+    // Muestra el número de botellas de plastico en el monitor serial
+    Serial.print("Numero de botellas de plastico: ");
+    Serial.println(contadorPlastico);
+  } else {
+    digitalWrite(RELAY_PIN, LOW); // Desactiva el relé
   }
 
   //Encoder
@@ -130,21 +117,10 @@ void loop() {
 
   }
 
+  
+delay(100);
 }
 
-//Funcion para enviar los datos en el formato que recibe LabVIEW
-void sendDataToSerial(){
-  if(tb_check(&t_send)){
-    Serial.print("P");
-    Serial.print(conteoBotellas);
-    Serial.print("L");
-    Serial.print(conteoLatas);
-    Serial.print("R");
-    Serial.print(rpm);
-    Serial.println("X");
-    tb_next(&t_send);
-  }
-}
 
 void generateTrigger(int trigPin){
   digitalWrite(trigPin, LOW);  
@@ -154,6 +130,21 @@ void generateTrigger(int trigPin){
 	if(tb_check(&t_high_trigger))  
 	  digitalWrite(trigPin, LOW);
     tb_next(&t_high_trigger);
+}
+
+
+//Funcion para enviar los datos en el formato que recibe LabVIEW
+void sendDataToSerial(){
+  if(tb_check(&t_send)){
+    Serial.print("L");
+    Serial.print(contadorMetal);
+    Serial.print("P");
+    Serial.print(contadorPlastico);
+    Serial.print("R");
+    Serial.print(rpm);
+    Serial.println("F");
+    tb_next(&t_send);
+  }
 }
 
 //Encoder
